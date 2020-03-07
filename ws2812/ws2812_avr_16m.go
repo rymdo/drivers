@@ -1,4 +1,4 @@
-// +build arduino
+// +build atmega328p
 
 package ws2812
 
@@ -11,8 +11,8 @@ import (
 // Send a single byte using the WS2812 protocol.
 func (d Device) WriteByte(c byte) error {
 	// For the AVR at 16MHz
-	portSet, maskSet := d.Pin.PortMaskSet()
-	portClear, maskClear := d.Pin.PortMaskClear()
+	port, maskSet := d.Pin.PortMaskSet()
+	_, maskClear := d.Pin.PortMaskClear()
 
 	// See:
 	// https://wp.josh.com/2014/05/13/ws2812-neopixels-are-not-so-finicky-once-you-get-to-know-them/
@@ -22,16 +22,16 @@ func (d Device) WriteByte(c byte) error {
 	// T1L: 8  cycles or 500ns -> together 17 cycles or 1062ns
 	avr.AsmFull(`
 	send_bit:
-		st    {portSet}, {maskSet}     ; [2]   set output high
+		st    {port}, {maskSet}     ; [2]   set output high
 		lsl   {value}                  ; [1]   shift off the next bit, store it in C
 		brcs  skip_store               ; [1/2] branch if this bit is high (long pulse)
-		st    {portClear}, {maskClear} ; [2]   set output low (short pulse)
+		st    {port}, {maskClear} ; [2]   set output low (short pulse)
 	skip_store:
 		nop                            ; [4]   wait before changing the output again
 		nop
 		nop
 		nop
-		st    {portClear}, {maskClear} ; [2]   set output low (end of pulse)
+		st    {port}, {maskClear} ; [2]   set output low (end of pulse)
 		nop                            ; [3]
 		nop
 		nop
@@ -39,11 +39,10 @@ func (d Device) WriteByte(c byte) error {
 		brne  send_bit                 ; [1/2] send the next bit, if not at the end of the loop
 	`, map[string]interface{}{
 		"value":     c,
-		"i":         8,
+		"i":         byte(8),
+		"port":      port,
 		"maskSet":   maskSet,
-		"portSet":   portSet,
 		"maskClear": maskClear,
-		"portClear": portClear,
 	})
 	return nil
 }
